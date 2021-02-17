@@ -1,4 +1,151 @@
 #!/bin/bash
 
-printenv | sort | grep ^HOMEBREW_
-echo "$@"
+if test "${1,,}" == "--debug"; then
+    shift
+    echo "$0"
+    printenv | sort | grep ^HOMEBREW_
+    echo "$@"
+fi
+
+export IMMORTAL_SDIR=${HOMEBREW_PREFIX}/var/run/immortal
+#export IMMORTAL_EXIT=1
+
+function service_exists() {
+    local SERVICE="$1"
+    if test -z "${SERVICE}"; then
+        echo "INTERNAL ERROR: Service must be specified (service_exists)."
+        exit 1
+    fi
+
+    if test -f "${HOMEBREW_PREFIX}/etc/immortal/${SERVICE}.yml"; then
+        echo true
+    else
+        echo false
+    fi
+}
+
+function command_list() {
+    while test "$#" -gt 0; do
+        case "$1" in
+
+            --help|-h)
+                cat <<-EOS
+
+Usage: brew immortal list [--help]
+
+Displays available services.
+
+Options:
+    --help, -h    Show usage
+
+EOS
+                exit
+                ;;
+
+        esac
+
+        shift
+    done
+
+    ls "${HOMEBREW_PREFIX}/etc/immortal" | \
+        while read -r SERVICE; do
+            echo "$(basename ${SERVICE} .yml)"
+        done
+}
+
+function start_service() {
+    local SERVICE="$1"
+    if test -z "${SERVICE}"; then
+        echo "ERROR: Service must be specified."
+        exit 1
+    fi
+
+    if ! $(service_exists "${SERVICE}"); then
+        echo "ERROR: Service <${SERVICE}> not found."
+        exit 1
+    fi
+
+    immortal -n -ctl "${SERVICE}" -c "${HOMEBREW_PREFIX}/etc/immortal/${SERVICE}.yml" dockerd-rootless.sh >"${HOMEBREW_PREFIX}/var/log/homebrew-immortal-${SERVICE}.log" 2>&1 &
+}
+
+function command_start() {
+    while test "$#" -gt 0; do
+        case "$1" in
+
+            --help|-h)
+                cat <<-EOS
+
+Usage: brew immortal start <service> [<service>] [--help]
+
+Starts one or more services.
+
+Options:
+    --help, -h    Show usage
+
+EOS
+                exit
+                ;;
+
+            *)
+                start_service "$1"
+                ;;
+
+        esac
+
+        shift
+    done
+}
+
+function main() {
+    while test "$#" -gt 0; do
+        local argument=$1
+        shift
+
+        case "${argument}" in
+
+            --help|-h)
+                usage
+                exit
+                ;;
+
+            list|l|ls)
+                command_list "$@"
+                exit
+                ;;
+
+            dir)
+                immortaldir "${HOMEBREW_PREFIX}/etc/immortal/"
+                exit
+                ;;
+
+            start)
+                command_start "$@"
+                exit
+                ;;
+
+            status)
+                exec immortalctl
+                ;;
+
+            stop)
+                exec immortalctl stop "$1"
+                ;;
+
+            halt)
+                exec immortalctl halt "$1"
+                ;;
+
+            *)
+                echo "ERROR: Unknown command or parameter <${argument}>."
+                exit 1
+                ;;
+
+        esac
+    done
+}
+
+function usage() {
+    :
+}
+
+main "$@"
