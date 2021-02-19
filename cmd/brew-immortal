@@ -47,7 +47,8 @@ EOS
         shift
     done
 
-    ls "${HOMEBREW_PREFIX}/etc/immortal" | \
+    ls "${HOMEBREW_PREFIX}/etc/immortal/" | \
+        grep "\.yml$" | \
         while read -r SERVICE; do
             echo "$(basename ${SERVICE} .yml)"
         done
