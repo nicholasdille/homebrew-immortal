@@ -2,13 +2,17 @@
 
 if test "${1,,}" == "--debug"; then
     shift
+    echo "### DEBUG START"
+    echo "### \$0"
     echo "$0"
+    echo "### HOMEBREW_"
     printenv | sort | grep ^HOMEBREW_
+    echo "### \$@"
     echo "$@"
+    echo "### DEBUG END"
 fi
 
 export IMMORTAL_SDIR=${HOMEBREW_PREFIX}/var/run/immortal
-#export IMMORTAL_EXIT=1
 
 function service_exists() {
     local SERVICE="$1"
@@ -31,7 +35,7 @@ function command_list() {
             --help|-h)
                 cat <<-EOS
 
-Usage: brew immortal list [--help]
+Usage: brew immortal list [<options>]
 
 Displays available services.
 
@@ -69,6 +73,21 @@ function start_service() {
     immortal -n -ctl "${SERVICE}" -c "${HOMEBREW_PREFIX}/etc/immortal/${SERVICE}.yml" dockerd-rootless.sh >"${HOMEBREW_PREFIX}/var/log/homebrew-immortal-${SERVICE}.log" 2>&1 &
 }
 
+function stop_service() {
+    local SERVICE="$1"
+    if test -z "${SERVICE}"; then
+        echo "ERROR: Service must be specified."
+        exit 1
+    fi
+
+    if ! $(service_exists "${SERVICE}"); then
+        echo "ERROR: Service <${SERVICE}> not found."
+        exit 1
+    fi
+
+    immortalctl halt "${SERVICE}"
+}
+
 function command_start() {
     while test "$#" -gt 0; do
         case "$1" in
@@ -76,7 +95,7 @@ function command_start() {
             --help|-h)
                 cat <<-EOS
 
-Usage: brew immortal start <service> [<service>] [--help]
+Usage: brew immortal start [<options>] <service> [<service>]
 
 Starts one or more services.
 
@@ -97,6 +116,34 @@ EOS
     done
 }
 
+function command_stop() {
+    while test "$#" -gt 0; do
+        case "$1" in
+
+            --help|-h)
+                cat <<-EOS
+
+Usage: brew immortal stop [<options>] <service> [<service>]
+
+Stops one or more services.
+
+Options:
+    --help, -h    Show usage
+
+EOS
+                exit
+                ;;
+
+            *)
+                stop_service "$1"
+                ;;
+
+        esac
+
+        shift
+    done
+}
+
 function main() {
     while test "$#" -gt 0; do
         local argument=$1
@@ -109,13 +156,8 @@ function main() {
                 exit
                 ;;
 
-            list|l|ls)
+            list)
                 command_list "$@"
-                exit
-                ;;
-
-            dir)
-                immortaldir "${HOMEBREW_PREFIX}/etc/immortal/"
                 exit
                 ;;
 
@@ -129,11 +171,8 @@ function main() {
                 ;;
 
             stop)
-                exec immortalctl stop "$1"
-                ;;
-
-            halt)
-                exec immortalctl halt "$1"
+                command_stop "$@"
+                exit
                 ;;
 
             *)
@@ -146,7 +185,18 @@ function main() {
 }
 
 function usage() {
-    :
+    cat <<-EOS
+Usage: brew immortal <options> <command> ...
+
+Options:
+  --help, -h    Show usage
+
+Commands:
+  list      Show existing services
+  start     Start a service
+  status    Show status of all services
+  stop      Stop a service
+EOS
 }
 
 main "$@"
